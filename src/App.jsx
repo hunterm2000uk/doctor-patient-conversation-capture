@@ -50,8 +50,10 @@ import React, { useState, useEffect, useRef } from 'react';
                 if (event.data.size > 0) {
                   audioChunks.current.push(event.data);
                   if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-                    setStatusMessage('Sending audio data to Speechmatics API...');
+                    setStatusMessage(`Sending audio data to Speechmatics API... Chunk size: ${event.data.size}`);
                     ws.current.send(event.data);
+                  } else {
+                    setStatusMessage(`WebSocket not open, audio chunk not sent. ReadyState: ${ws.current?.readyState}`);
                   }
                 }
               };
@@ -69,7 +71,7 @@ import React, { useState, useEffect, useRef } from 'react';
               ws.current = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe?format=pcm&sample_rate=48000');
 
               ws.current.onopen = () => {
-                setStatusMessage('WebSocket connection opened. Starting transcription...');
+                setStatusMessage('WebSocket connection opened. Sending StartRecognition message...');
                 ws.current.send(JSON.stringify({
                   message: 'StartRecognition',
                   transcription_config: {
@@ -83,6 +85,7 @@ import React, { useState, useEffect, useRef } from 'react';
               ws.current.onmessage = (event) => {
                 try {
                   const data = JSON.parse(event.data);
+                  setStatusMessage(`WebSocket message received: ${JSON.stringify(data)}`);
                   if (data.message === 'AddTranscript') {
                     const timestamp = new Date().toLocaleTimeString();
                     const transcript = data.results.reduce((acc, result) => acc + result.alternatives[0].transcript, '');
@@ -105,6 +108,8 @@ import React, { useState, useEffect, useRef } from 'react';
                 if (ws.current && ws.current.readyState !== WebSocket.CLOSED) {
                   ws.current.send(JSON.stringify({ message: 'EndOfStream' }));
                   ws.current.close();
+                } else {
+                  setStatusMessage('WebSocket connection already closed.');
                 }
               };
             })
