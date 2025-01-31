@@ -16,6 +16,7 @@ import React, { useState, useEffect, useRef } from 'react';
       const audioUrl = useRef(null);
       const ws = useRef(null);
       const apiKey = 'fQxsqtjOjLsXOrzCgyRAJGjXcYvLpjW1'; // Updated API key
+      const timeoutRef = useRef(null);
 
       const handleEditLetter = (field, value) => {
         setClinicLetter(prev => ({ ...prev, [field]: value }));
@@ -80,6 +81,11 @@ import React, { useState, useEffect, useRef } from 'react';
                   },
                   auth_token: apiKey
                 }));
+                timeoutRef.current = setTimeout(() => {
+                  if (transcription === '') {
+                    setStatusMessage('No transcription received from Speechmatics API after 10 seconds.');
+                  }
+                }, 10000);
               };
 
               ws.current.onmessage = (event) => {
@@ -90,7 +96,8 @@ import React, { useState, useEffect, useRef } from 'react';
                     const timestamp = new Date().toLocaleTimeString();
                     const transcript = data.results.reduce((acc, result) => acc + result.alternatives[0].transcript, '');
                     setTranscription(prev => prev + `[${timestamp}] ${transcript} `);
-                    setStatusMessage('Transcription received.');
+                    setStatusMessage('Transcription received from Speechmatics API.');
+                    clearTimeout(timeoutRef.current);
                   }
                 } catch (error) {
                   console.error('Error parsing WebSocket message:', error);
