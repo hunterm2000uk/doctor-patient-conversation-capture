@@ -55,7 +55,7 @@ import React, { useState, useEffect, useRef } from 'react';
                     setStatusMessage(prev => prev + `\nSending audio data to Speechmatics API... Chunk size: ${event.data.size}`);
                     ws.current.send(event.data);
                   } else {
-                    setStatusMessage(prev => prev + `\nWebSocket not open, audio chunk not sent. ReadyState: ${ws.current?.readyState}`);
+                     setStatusMessage(prev => prev + `\nWebSocket not open, audio chunk not sent. ReadyState: ${ws.current?.readyState}`);
                   }
                 }
               };
@@ -65,6 +65,14 @@ import React, { useState, useEffect, useRef } from 'react';
                 audioChunks.current = [];
                 const url = URL.createObjectURL(audioBlob);
                 audioUrl.current = url;
+                if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+                  setStatusMessage(prev => prev + '\nSending EndOfStream message to Speechmatics API...');
+                  ws.current.send(JSON.stringify({ message: 'EndOfStream' }));
+                  ws.current.close();
+                  setStatusMessage(prev => prev + '\nEndOfStream message sent and WebSocket closed.');
+                } else {
+                  setStatusMessage(prev => prev + '\nWebSocket not open, EndOfStream message not sent.');
+                }
               };
               mediaRecorder.current.start(200); // Send data every 200ms
 
@@ -112,18 +120,20 @@ import React, { useState, useEffect, useRef } from 'react';
               };
 
               ws.current.onclose = () => {
-                 setStatusMessage(prev => prev + '\nWebSocket connection closed. Sending EndOfStream message...');
-                if (ws.current && ws.current.readyState !== WebSocket.CLOSED) {
-                  ws.current.send(JSON.stringify({ message: 'EndOfStream' }));
-                  ws.current.close();
-                } else {
-                  setStatusMessage(prev => prev + '\nWebSocket connection already closed.');
-                }
+                setStatusMessage(prev => prev + '\nWebSocket connection closed.');
               };
             })
             .catch(error => {
               console.error('Error accessing microphone:', error);
               setStatusMessage(prev => prev + `\nError accessing microphone: ${error.message}`);
+            })
+            .finally(() => {
+              if (mediaRecorder.current && mediaRecorder.current.state === 'recording') {
+                mediaRecorder.current.stop();
+              }
+              if (streamRef.current) {
+                streamRef.current.getTracks().forEach(track => track.stop());
+              }
             });
         } else if (mediaRecorder.current && mediaRecorder.current.state === 'recording') {
             mediaRecorder.current.stop();
