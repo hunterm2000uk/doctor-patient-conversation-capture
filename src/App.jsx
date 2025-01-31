@@ -10,6 +10,7 @@ import React, { useState, useEffect, useRef } from 'react';
         historyOfPresentIllness: 'The patient reports...',
         assessmentAndPlan: 'Based on the above, the plan is...'
       });
+      const [statusMessage, setStatusMessage] = useState('Ready');
       const mediaRecorder = useRef(null);
       const audioChunks = useRef([]);
       const streamRef = useRef(null);
@@ -40,24 +41,29 @@ import React, { useState, useEffect, useRef } from 'react';
 
       useEffect(() => {
         if (isRecording) {
+          setStatusMessage('Requesting microphone access...');
           navigator.mediaDevices.getUserMedia({ audio: true })
             .then(stream => {
+              setStatusMessage('Microphone access granted. Initializing audio recorder...');
               streamRef.current = stream;
               mediaRecorder.current = new MediaRecorder(stream, { mimeType: 'audio/webm' });
               mediaRecorder.current.ondataavailable = (event) => {
                 if (event.data.size > 0) {
                   audioChunks.current.push(event.data);
                   if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+                    setStatusMessage('Sending audio data to Speechmatics API...');
                     ws.current.send(event.data);
                   }
                 }
               };
               mediaRecorder.current.onstop = () => {
+                setStatusMessage('Audio recording stopped. Processing audio...');
                 const audioBlob = new Blob(audioChunks.current, { type: 'audio/webm' });
                 audioChunks.current = [];
                 const url = URL.createObjectURL(audioBlob);
                 audioUrl.current = url;
                 if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+                  setStatusMessage('Sending EndOfStream message to Speechmatics API...');
                   ws.current.send(JSON.stringify({ message: 'EndOfStream' }));
                   ws.current.close();
                 }
@@ -65,11 +71,12 @@ import React, { useState, useEffect, useRef } from 'react';
               mediaRecorder.current.start(200); // Send data every 200ms
 
               // Initialize WebSocket
+              setStatusMessage('Connecting to Speechmatics API...');
               ws.current = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe?format=pcm&sample_rate=48000',
               );
 
               ws.current.onopen = () => {
-                console.log('WebSocket connection opened');
+                setStatusMessage('WebSocket connection opened. Starting transcription...');
                 ws.current.send(JSON.stringify({
                   message: 'StartRecognition',
                   transcription_config: {
@@ -87,22 +94,27 @@ import React, { useState, useEffect, useRef } from 'react';
                     const timestamp = new Date().toLocaleTimeString();
                     const transcript = data.results.reduce((acc, result) => acc + result.alternatives[0].transcript, '');
                     setTranscription(prev => prev + `[${timestamp}] ${transcript} `);
+                    setStatusMessage('Transcription received.');
                   }
                 } catch (error) {
                   console.error('Error parsing WebSocket message:', error);
+                  setStatusMessage(`Error parsing WebSocket message: ${error.message}`);
                 }
               };
 
               ws.current.onerror = (error) => {
                 console.error('WebSocket error:', error);
+                setStatusMessage(`WebSocket error: ${error.message}`);
               };
 
               ws.current.onclose = () => {
+                setStatusMessage('WebSocket connection closed.');
                 console.log('WebSocket connection closed');
               };
             })
             .catch(error => {
               console.error('Error accessing microphone:', error);
+              setStatusMessage(`Error accessing microphone: ${error.message}`);
             });
         } else if (mediaRecorder.current && mediaRecorder.current.state === 'recording') {
             mediaRecorder.current.stop();
@@ -147,6 +159,9 @@ import React, { useState, useEffect, useRef } from 'react';
               </div>
               <button onClick={handleSave}>Save</button>
             </div>
+          </div>
+          <div className="status-box">
+            <p>Status: {statusMessage}</p>
           </div>
         </div>
       );

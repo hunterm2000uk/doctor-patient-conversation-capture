@@ -35,3 +35,10 @@
       height: 100px;
       margin-bottom: 10px;
     }
+
+    .status-box {
+      padding: 10px;
+      text-align: center;
+      background-color: #e0e0e0;
+      margin-top: 10px;
+    }
