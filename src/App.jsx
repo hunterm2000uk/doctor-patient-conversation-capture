@@ -40,7 +40,7 @@ import React, { useState, useEffect, useRef } from 'react';
 
       useEffect(() => {
         if (isRecording) {
-          navigator.mediaDevices.getUserMedia({ audio: true })
+          navigator.mediaDevices.getUserMedia({ audio: true, sampleRate: 16000 })
             .then(stream => {
               streamRef.current = stream;
               mediaRecorder.current = new MediaRecorder(stream, { mimeType: 'audio/webm' });
@@ -65,7 +65,7 @@ import React, { useState, useEffect, useRef } from 'react';
               mediaRecorder.current.start(200); // Send data every 200ms
 
               // Initialize WebSocket
-              ws.current = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe?format=pcm&sample_rate=48000',
+              ws.current = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe',
               );
 
               ws.current.onopen = () => {
@@ -74,7 +74,17 @@ import React, { useState, useEffect, useRef } from 'react';
                   message: 'StartRecognition',
                   transcription_config: {
                     language: 'en',
+                    diarization: 'none',
                     operating_point: 'enhanced',
+                    max_delay_mode: 'flexible',
+                    max_delay: 1,
+                    enable_partials: true,
+                    enable_entities: true
+                  },
+                  audio_format: {
+                    type: 'raw',
+                    sample_rate: 16000,
+                    encoding: 'pcm_f32le'
                   },
                   auth_token: apiKey
                 }));
@@ -83,7 +93,7 @@ import React, { useState, useEffect, useRef } from 'react';
               ws.current.onmessage = (event) => {
                 try {
                   const data = JSON.parse(event.data);
-                  if (data.message === 'AddTranscript') {
+                   if (data.message === 'AddTranscript') {
                     const timestamp = new Date().toLocaleTimeString();
                     const transcript = data.results.reduce((acc, result) => acc + result.alternatives[0].transcript, '');
                     setTranscription(prev => prev + `[${timestamp}] ${transcript} `);
