@@ -84,7 +84,7 @@ import React, { useState, useEffect, useRef } from 'react';
               // Initialize WebSocket
               setStatusMessage(prev => prev + '\nConnecting to Speechmatics API...');
               ws.current = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe?format=pcm&sample_rate=48000', 'pcm');
-							setStatusMessage(prev => prev + '\nDebug1');
+
               // Log WebSocket open event
               ws.current.onopen = () => {
                 setStatusMessage(prev => prev + `\nWebSocket connection opened. ReadyState: ${ws.current.readyState}.`);
@@ -99,7 +99,6 @@ import React, { useState, useEffect, useRef } from 'react';
                     operating_point: 'enhanced',
                   }
                 };
-								setStatusMessage(prev => prev + '\nDebug2');
                 setStatusMessage(prev => prev + `\nSending StartRecognition message: ${JSON.stringify(startRecognitionMessage)}`);
                 setTimeout(() => {
                   // Log the WebSocket readyState before sending StartRecognition message
@@ -113,50 +112,6 @@ import React, { useState, useEffect, useRef } from 'react';
                 }, 10000);
                 mediaRecorder.current.start(200); // Start recording after WebSocket is open
               };
-
-              ws.current.onmessage = (event) => {
-                try {
-                  const data = JSON.parse(event.data);
-                  setStatusMessage(prev => prev + `\nWebSocket message received: ${JSON.stringify(data)}`);
-                  if (data.message === 'StartRecognition') {
-                    if (data.error) {
-                      setStatusMessage(prev => prev + `\nStartRecognition error: ${data.error}`);
-                    } else {
-                      setStatusMessage(prev => prev + '\nStartRecognition successful.');
-                    }
-                  }
-                  if (data.message === 'AddTranscript') {
-                    const timestamp = new Date().toLocaleTimeString();
-                    const transcript = data.results.reduce((acc, result) => acc + result.alternatives[0].transcript, '');
-                    setTranscription(prev => prev + `[${timestamp}] ${transcript} `);
-                    setStatusMessage(prev => prev + '\nTranscription received from Speechmatics API.');
-                    clearTimeout(timeoutRef.current);
-                  }
-                } catch (error) {
-                  console.error('Error parsing WebSocket message:', error);
-                  setStatusMessage(prev => prev + `\nError parsing WebSocket message: ${error.message}`);
-                }
-              };
-
-              ws.current.onerror = (event) => {
-                console.error('WebSocket error:', event);
-                setStatusMessage(prev => prev + `\nWebSocket error: ${event.message || event.type}`);
-                clearTimeout(wsTimeoutRef.current);
-              };
-
-              ws.current.onclose = (event) => {
-                setStatusMessage(prev => prev + `\nWebSocket connection closed. Close code: ${event.code}, Reason: ${event.reason}`);
-                clearTimeout(wsTimeoutRef.current);
-              };
-
-              wsTimeoutRef.current = setTimeout(() => {
-                if (ws.current && ws.current.readyState !== WebSocket.OPEN) {
-                  setStatusMessage(prev => prev + '\nWebSocket connection timed out.');
-                  if (ws.current && ws.current.readyState !== WebSocket.CLOSED) {
-                    ws.current.close();
-                  }
-                }
-              }, 5000);
             })
             .catch(error => {
               console.error('Error accessing microphone:', error);
@@ -177,6 +132,54 @@ import React, { useState, useEffect, useRef } from 'react';
             }
         }
       }, [isRecording]);
+
+      useEffect(() => {
+        if (ws.current) {
+          ws.current.onmessage = (event) => {
+            try {
+              const data = JSON.parse(event.data);
+              setStatusMessage(prev => prev + `\nWebSocket message received: ${JSON.stringify(data)}`);
+              if (data.message === 'StartRecognition') {
+                if (data.error) {
+                  setStatusMessage(prev => prev + `\nStartRecognition error: ${data.error}`);
+                } else {
+                  setStatusMessage(prev => prev + '\nStartRecognition successful.');
+                }
+              }
+              if (data.message === 'AddTranscript') {
+                const timestamp = new Date().toLocaleTimeString();
+                const transcript = data.results.reduce((acc, result) => acc + result.alternatives[0].transcript, '');
+                setTranscription(prev => prev + `[${timestamp}] ${transcript} `);
+                setStatusMessage(prev => prev + '\nTranscription received from Speechmatics API.');
+                clearTimeout(timeoutRef.current);
+              }
+            } catch (error) {
+              console.error('Error parsing WebSocket message:', error);
+              setStatusMessage(prev => prev + `\nError parsing WebSocket message: ${error.message}`);
+            }
+          };
+
+          ws.current.onerror = (event) => {
+            console.error('WebSocket error:', event);
+            setStatusMessage(prev => prev + `\nWebSocket error: ${event.message || event.type}`);
+            clearTimeout(wsTimeoutRef.current);
+          };
+
+          ws.current.onclose = (event) => {
+            setStatusMessage(prev => prev + `\nWebSocket connection closed. Close code: ${event.code}, Reason: ${event.reason}`);
+            clearTimeout(wsTimeoutRef.current);
+          };
+
+          wsTimeoutRef.current = setTimeout(() => {
+            if (ws.current && ws.current.readyState !== WebSocket.OPEN) {
+              setStatusMessage(prev => prev + '\nWebSocket connection timed out.');
+              if (ws.current && ws.current.readyState !== WebSocket.CLOSED) {
+                ws.current.close();
+              }
+            }
+          }, 5000);
+        }
+      }, [ws.current]);
 
       const toggleRecording = () => {
         setIsRecording(!isRecording);
