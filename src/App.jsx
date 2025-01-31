@@ -55,6 +55,8 @@ import React, { useState, useEffect, useRef } from 'react';
               mediaRecorder.current.ondataavailable = (event) => {
                 if (event.data.size > 0) {
                   audioChunks.current.push(event.data);
+                  // Log the WebSocket readyState before sending audio data
+                  setStatusMessage(prev => prev + `\nWebSocket readyState before sending audio: ${ws.current?.readyState}`);
                   if (ws.current && ws.current.readyState === WebSocket.OPEN) {
                     setStatusMessage(prev => prev + `\nSending audio data to Speechmatics API... Chunk size: ${event.data.size}`);
                     ws.current.send(event.data);
@@ -83,20 +85,25 @@ import React, { useState, useEffect, useRef } from 'react';
               setStatusMessage(prev => prev + '\nConnecting to Speechmatics API...');
               ws.current = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe?format=pcm&sample_rate=48000', 'pcm');
 
+              // Log WebSocket open event
               ws.current.onopen = () => {
                 setStatusMessage(prev => prev + `\nWebSocket connection opened. ReadyState: ${ws.current.readyState}.`);
-                 setTimeout(() => {
-                  setStatusMessage(prev => prev + '\nSending StartRecognition message...');
-                  ws.current.send(JSON.stringify({
-                    message: 'StartRecognition',
-                    auth_token: apiKey,
-                    transcription_config: {
-                      language: 'en',
-                      audio_format: 'pcm',
-                      sample_rate: 48000,
-                      operating_point: 'enhanced',
-                    }
-                  }));
+                // Log the full StartRecognition message before sending
+                const startRecognitionMessage = {
+                  message: 'StartRecognition',
+                  auth_token: apiKey,
+                  transcription_config: {
+                    language: 'en',
+                    audio_format: 'pcm',
+                    sample_rate: 48000,
+                    operating_point: 'enhanced',
+                  }
+                };
+                setStatusMessage(prev => prev + `\nSending StartRecognition message: ${JSON.stringify(startRecognitionMessage)}`);
+                setTimeout(() => {
+                  // Log the WebSocket readyState before sending StartRecognition message
+                  setStatusMessage(prev => prev + `\nWebSocket readyState before sending StartRecognition: ${ws.current.readyState}`);
+                  ws.current.send(JSON.stringify(startRecognitionMessage));
                 }, 500);
                 timeoutRef.current = setTimeout(() => {
                   if (transcription === '') {
