@@ -82,9 +82,9 @@ import React, { useState, useEffect, useRef } from 'react';
               };
 
               // Initialize WebSocket
-              setStatusMessage(prev => prev + '\n1 Connecting to Speechmatics API...');
+              setStatusMessage(prev => prev + '\nConnecting to Speechmatics API...');
               ws.current = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe?format=pcm&sample_rate=48000', 'pcm');
-							setStatusMessage(prev => prev + '\nConnected...');
+							setStatusMessage(prev => prev + '\nDebug1');
               // Log WebSocket open event
               ws.current.onopen = () => {
                 setStatusMessage(prev => prev + `\nWebSocket connection opened. ReadyState: ${ws.current.readyState}.`);
@@ -99,6 +99,7 @@ import React, { useState, useEffect, useRef } from 'react';
                     operating_point: 'enhanced',
                   }
                 };
+								setStatusMessage(prev => prev + '\nDebug2');
                 setStatusMessage(prev => prev + `\nSending StartRecognition message: ${JSON.stringify(startRecognitionMessage)}`);
                 setTimeout(() => {
                   // Log the WebSocket readyState before sending StartRecognition message
