@@ -18,6 +18,7 @@ import React, { useState, useEffect, useRef } from 'react';
       const apiKey = 'fQxsqtjOjLsXOrzCgyRAJGjXcYvLpjW1'; // Updated API key
       const timeoutRef = useRef(null);
       const statusBoxRef = useRef(null);
+      const wsTimeoutRef = useRef(null);
 
       const handleEditLetter = (field, value) => {
         setClinicLetter(prev => ({ ...prev, [field]: value }));
@@ -114,14 +115,25 @@ import React, { useState, useEffect, useRef } from 'react';
                 }
               };
 
-              ws.current.onerror = (error) => {
-                console.error('WebSocket error:', error);
-                setStatusMessage(prev => prev + `\nWebSocket error: ${error.message}`);
+              ws.current.onerror = (event) => {
+                console.error('WebSocket error:', event);
+                setStatusMessage(prev => prev + `\nWebSocket error: ${event.message || event.type}`);
+                clearTimeout(wsTimeoutRef.current);
               };
 
               ws.current.onclose = () => {
                 setStatusMessage(prev => prev + '\nWebSocket connection closed.');
+                clearTimeout(wsTimeoutRef.current);
               };
+
+              wsTimeoutRef.current = setTimeout(() => {
+                if (ws.current && ws.current.readyState !== WebSocket.OPEN) {
+                  setStatusMessage(prev => prev + '\nWebSocket connection timed out.');
+                  if (ws.current && ws.current.readyState !== WebSocket.CLOSED) {
+                    ws.current.close();
+                  }
+                }
+              }, 5000);
             })
             .catch(error => {
               console.error('Error accessing microphone:', error);
