@@ -81,20 +81,23 @@ import React, { useState, useEffect, useRef } from 'react';
 
               // Initialize WebSocket
               setStatusMessage(prev => prev + '\nConnecting to Speechmatics API...');
-              ws.current = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe', 'pcm');
+              ws.current = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe?format=pcm&sample_rate=48000', 'pcm');
 
               ws.current.onopen = () => {
-                setStatusMessage(prev => prev + `\nWebSocket connection opened. ReadyState: ${ws.current.readyState}. Sending StartRecognition message...`);
-                ws.current.send(JSON.stringify({
-                  message: 'StartRecognition',
-                  transcription_config: {
-                    language: 'en',
-                     audio_format: 'pcm',
-                     sample_rate: 48000,
-                    operating_point: 'enhanced',
-                  },
-                  auth_token: apiKey
-                }));
+                setStatusMessage(prev => prev + `\nWebSocket connection opened. ReadyState: ${ws.current.readyState}.`);
+                 setTimeout(() => {
+                  setStatusMessage(prev => prev + '\nSending StartRecognition message...');
+                  ws.current.send(JSON.stringify({
+                    message: 'StartRecognition',
+                    auth_token: apiKey,
+                    transcription_config: {
+                      language: 'en',
+                      audio_format: 'pcm',
+                      sample_rate: 48000,
+                      operating_point: 'enhanced',
+                    }
+                  }));
+                }, 500);
                 timeoutRef.current = setTimeout(() => {
                   if (transcription === '') {
                     setStatusMessage(prev => prev + '\nNo transcription received from Speechmatics API after 10 seconds.');
