@@ -40,16 +40,21 @@ import React, { useState, useEffect, useRef } from 'react';
 
       useEffect(() => {
         if (isRecording) {
-          navigator.mediaDevices.getUserMedia({ audio: true, sampleRate: 16000 })
+          navigator.mediaDevices.getUserMedia({ audio: {sampleRate: 16000} })
             .then(stream => {
               streamRef.current = stream;
-              mediaRecorder.current = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+              mediaRecorder.current = new MediaRecorder(stream);
               mediaRecorder.current.ondataavailable = (event) => {
                 if (event.data.size > 0) {
                   audioChunks.current.push(event.data);
-                  if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-                    ws.current.send(event.data);
-                  }
+                   if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+                      const float32Array = new Float32Array(event.data);
+                      const int16Array = new Int16Array(float32Array.length);
+                      for (let i = 0; i < float32Array.length; i++) {
+                        int16Array[i] = Math.min(Math.max(float32Array[i] * 0x7FFF, -0x8000), 0x7FFF);
+                      }
+                      ws.current.send(int16Array.buffer);
+                    }
                 }
               };
               mediaRecorder.current.onstop = () => {
@@ -65,8 +70,7 @@ import React, { useState, useEffect, useRef } from 'react';
               mediaRecorder.current.start(200); // Send data every 200ms
 
               // Initialize WebSocket
-              ws.current = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe',
-              );
+              ws.current = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe');
 
               ws.current.onopen = () => {
                 console.log('WebSocket connection opened');
