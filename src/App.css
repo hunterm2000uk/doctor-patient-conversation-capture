@@ -38,7 +38,10 @@
 
     .status-box {
       padding: 10px;
-      text-align: center;
+      text-align: left;
       background-color: #e0e0e0;
       margin-top: 10px;
+      height: 150px;
+      overflow-y: scroll;
+      white-space: pre-wrap;
     }

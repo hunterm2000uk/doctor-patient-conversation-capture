@@ -9,7 +9,7 @@ import React, { useState, useEffect, useRef } from 'react';
         historyOfPresentIllness: 'The patient reports...',
         assessmentAndPlan: 'Based on the above, the plan is...'
       });
-      const [statusMessage, setStatusMessage] = useState('Ready');
+      const [statusMessage, setStatusMessage] = useState('');
       const mediaRecorder = useRef(null);
       const audioChunks = useRef([]);
       const streamRef = useRef(null);
@@ -17,6 +17,7 @@ import React, { useState, useEffect, useRef } from 'react';
       const ws = useRef(null);
       const apiKey = 'fQxsqtjOjLsXOrzCgyRAJGjXcYvLpjW1'; // Updated API key
       const timeoutRef = useRef(null);
+      const statusBoxRef = useRef(null);
 
       const handleEditLetter = (field, value) => {
         setClinicLetter(prev => ({ ...prev, [field]: value }));
@@ -41,25 +42,25 @@ import React, { useState, useEffect, useRef } from 'react';
 
       useEffect(() => {
         if (isRecording) {
-          setStatusMessage('Requesting microphone access...');
+          setStatusMessage(prev => prev + '\nRequesting microphone access...');
           navigator.mediaDevices.getUserMedia({ audio: true })
             .then(stream => {
-              setStatusMessage('Microphone access granted. Initializing audio recorder...');
+              setStatusMessage(prev => prev + '\nMicrophone access granted. Initializing audio recorder...');
               streamRef.current = stream;
               mediaRecorder.current = new MediaRecorder(stream, { mimeType: 'audio/webm' });
               mediaRecorder.current.ondataavailable = (event) => {
                 if (event.data.size > 0) {
                   audioChunks.current.push(event.data);
                   if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-                    setStatusMessage(`Sending audio data to Speechmatics API... Chunk size: ${event.data.size}`);
+                    setStatusMessage(prev => prev + `\nSending audio data to Speechmatics API... Chunk size: ${event.data.size}`);
                     ws.current.send(event.data);
                   } else {
-                    setStatusMessage(`WebSocket not open, audio chunk not sent. ReadyState: ${ws.current?.readyState}`);
+                    setStatusMessage(prev => prev + `\nWebSocket not open, audio chunk not sent. ReadyState: ${ws.current?.readyState}`);
                   }
                 }
               };
               mediaRecorder.current.onstop = () => {
-                setStatusMessage('Audio recording stopped. Processing audio...');
+                setStatusMessage(prev => prev + '\nAudio recording stopped. Processing audio...');
                 const audioBlob = new Blob(audioChunks.current, { type: 'audio/webm' });
                 audioChunks.current = [];
                 const url = URL.createObjectURL(audioBlob);
@@ -68,11 +69,11 @@ import React, { useState, useEffect, useRef } from 'react';
               mediaRecorder.current.start(200); // Send data every 200ms
 
               // Initialize WebSocket
-              setStatusMessage('Connecting to Speechmatics API...');
+              setStatusMessage(prev => prev + '\nConnecting to Speechmatics API...');
               ws.current = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe?format=pcm&sample_rate=48000');
 
               ws.current.onopen = () => {
-                setStatusMessage('WebSocket connection opened. Sending StartRecognition message...');
+                setStatusMessage(prev => prev + '\nWebSocket connection opened. Sending StartRecognition message...');
                 ws.current.send(JSON.stringify({
                   message: 'StartRecognition',
                   transcription_config: {
@@ -83,7 +84,7 @@ import React, { useState, useEffect, useRef } from 'react';
                 }));
                 timeoutRef.current = setTimeout(() => {
                   if (transcription === '') {
-                    setStatusMessage('No transcription received from Speechmatics API after 10 seconds.');
+                    setStatusMessage(prev => prev + '\nNo transcription received from Speechmatics API after 10 seconds.');
                   }
                 }, 10000);
               };
@@ -91,38 +92,38 @@ import React, { useState, useEffect, useRef } from 'react';
               ws.current.onmessage = (event) => {
                 try {
                   const data = JSON.parse(event.data);
-                  setStatusMessage(`WebSocket message received: ${JSON.stringify(data)}`);
+                  setStatusMessage(prev => prev + `\nWebSocket message received: ${JSON.stringify(data)}`);
                   if (data.message === 'AddTranscript') {
                     const timestamp = new Date().toLocaleTimeString();
                     const transcript = data.results.reduce((acc, result) => acc + result.alternatives[0].transcript, '');
                     setTranscription(prev => prev + `[${timestamp}] ${transcript} `);
-                    setStatusMessage('Transcription received from Speechmatics API.');
+                    setStatusMessage(prev => prev + '\nTranscription received from Speechmatics API.');
                     clearTimeout(timeoutRef.current);
                   }
                 } catch (error) {
                   console.error('Error parsing WebSocket message:', error);
-                  setStatusMessage(`Error parsing WebSocket message: ${error.message}`);
+                  setStatusMessage(prev => prev + `\nError parsing WebSocket message: ${error.message}`);
                 }
               };
 
               ws.current.onerror = (error) => {
                 console.error('WebSocket error:', error);
-                setStatusMessage(`WebSocket error: ${error.message}`);
+                setStatusMessage(prev => prev + `\nWebSocket error: ${error.message}`);
               };
 
               ws.current.onclose = () => {
-                setStatusMessage('WebSocket connection closed. Sending EndOfStream message...');
+                 setStatusMessage(prev => prev + '\nWebSocket connection closed. Sending EndOfStream message...');
                 if (ws.current && ws.current.readyState !== WebSocket.CLOSED) {
                   ws.current.send(JSON.stringify({ message: 'EndOfStream' }));
                   ws.current.close();
                 } else {
-                  setStatusMessage('WebSocket connection already closed.');
+                  setStatusMessage(prev => prev + '\nWebSocket connection already closed.');
                 }
               };
             })
             .catch(error => {
               console.error('Error accessing microphone:', error);
-              setStatusMessage(`Error accessing microphone: ${error.message}`);
+              setStatusMessage(prev => prev + `\nError accessing microphone: ${error.message}`);
             });
         } else if (mediaRecorder.current && mediaRecorder.current.state === 'recording') {
             mediaRecorder.current.stop();
@@ -168,8 +169,8 @@ import React, { useState, useEffect, useRef } from 'react';
               <button onClick={handleSave}>Save</button>
             </div>
           </div>
-          <div className="status-box">
-            <p>Status: {statusMessage}</p>
+          <div className="status-box" ref={statusBoxRef}>
+            <pre>{statusMessage}</pre>
           </div>
         </div>
       );
