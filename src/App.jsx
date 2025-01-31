@@ -13,6 +13,7 @@ import React, { useState, useEffect, useRef } from 'react';
       const audioChunks = useRef([]);
       const streamRef = useRef(null);
       const audioUrl = useRef(null);
+      const recognition = useRef(null);
 
       const handleEditLetter = (field, value) => {
         setClinicLetter(prev => ({ ...prev, [field]: value }));
@@ -51,11 +52,30 @@ import React, { useState, useEffect, useRef } from 'react';
                 audioChunks.current = [];
                 const url = URL.createObjectURL(audioBlob);
                 audioUrl.current = url;
-                // Placeholder for STT
-                const timestamp = new Date().toLocaleTimeString();
-                setTranscription(prev => prev + `[${timestamp}] ... (audio processed) ... `);
               };
               mediaRecorder.current.start();
+
+              // Initialize SpeechRecognition
+              const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+              if (SpeechRecognition) {
+                recognition.current = new SpeechRecognition();
+                recognition.current.lang = 'en-US';
+                recognition.current.interimResults = true;
+
+                recognition.current.onresult = (event) => {
+                  let finalTranscript = '';
+                  for (let i = event.resultIndex; i < event.results.length; i++) {
+                    if (event.results[i].isFinal) {
+                      finalTranscript += event.results[i][0].transcript;
+                    }
+                  }
+                  if (finalTranscript) {
+                    const timestamp = new Date().toLocaleTimeString();
+                    setTranscription(prev => prev + `[${timestamp}] ${finalTranscript} `);
+                  }
+                };
+                recognition.current.start();
+              }
             })
             .catch(error => {
               console.error('Error accessing microphone:', error);
@@ -64,6 +84,9 @@ import React, { useState, useEffect, useRef } from 'react';
             mediaRecorder.current.stop();
             if (streamRef.current) {
               streamRef.current.getTracks().forEach(track => track.stop());
+            }
+            if (recognition.current) {
+              recognition.current.stop();
             }
         }
       }, [isRecording]);
