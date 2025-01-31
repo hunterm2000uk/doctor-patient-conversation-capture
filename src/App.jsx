@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
     import './App.css';
-    import { WebSocket } from 'ws';
 
     function App() {
       const [transcription, setTranscription] = useState('');
@@ -16,6 +15,7 @@ import React, { useState, useEffect, useRef } from 'react';
       const audioUrl = useRef(null);
       const ws = useRef(null);
       const apiKey = 'fQxsqtjOjLsXOrzCgyRAJGjXcYvLpjW1'; // Updated API key
+      const finalText = useRef('');
 
       const handleEditLetter = (field, value) => {
         setClinicLetter(prev => ({ ...prev, [field]: value }));
@@ -38,16 +38,36 @@ import React, { useState, useEffect, useRef } from 'react';
         extractMedicalDetails(transcription);
       }, [transcription]);
 
+      const fetchJWT = async () => {
+        const resp = await fetch('https://mp.speechmatics.com/v1/api_keys?type=rt', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            ttl: 3600,
+          }),
+        });
+        if (!resp.ok) {
+          throw new Error('Bad response from API', { cause: resp });
+        }
+        return (await resp.json()).key_value;
+      };
+
       useEffect(() => {
         if (isRecording) {
-          navigator.mediaDevices.getUserMedia({ audio: {sampleRate: 16000} })
-            .then(stream => {
-              streamRef.current = stream;
-              mediaRecorder.current = new MediaRecorder(stream);
-              mediaRecorder.current.ondataavailable = (event) => {
-                if (event.data.size > 0) {
-                  audioChunks.current.push(event.data);
-                   if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+          let jwt;
+          fetchJWT().then(token => {
+            jwt = token;
+            navigator.mediaDevices.getUserMedia({ audio: {sampleRate: 16000} })
+              .then(stream => {
+                streamRef.current = stream;
+                mediaRecorder.current = new MediaRecorder(stream);
+                mediaRecorder.current.ondataavailable = (event) => {
+                  if (event.data.size > 0) {
+                    audioChunks.current.push(event.data);
+                     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
                       const float32Array = new Float32Array(event.data);
                       const int16Array = new Int16Array(float32Array.length);
                       for (let i = 0; i < float32Array.length; i++) {
@@ -55,69 +75,76 @@ import React, { useState, useEffect, useRef } from 'react';
                       }
                       ws.current.send(int16Array.buffer);
                     }
-                }
-              };
-              mediaRecorder.current.onstop = () => {
-                const audioBlob = new Blob(audioChunks.current, { type: 'audio/webm' });
-                audioChunks.current = [];
-                const url = URL.createObjectURL(audioBlob);
-                audioUrl.current = url;
-                if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-                  ws.current.send(JSON.stringify({ message: 'EndOfStream' }));
-                  ws.current.close();
-                }
-              };
-              mediaRecorder.current.start(200); // Send data every 200ms
-
-              // Initialize WebSocket
-              ws.current = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe');
-
-              ws.current.onopen = () => {
-                console.log('WebSocket connection opened');
-                ws.current.send(JSON.stringify({
-                  message: 'StartRecognition',
-                  transcription_config: {
-                    language: 'en',
-                    diarization: 'none',
-                    operating_point: 'enhanced',
-                    max_delay_mode: 'flexible',
-                    max_delay: 1,
-                    enable_partials: true,
-                    enable_entities: true
-                  },
-                  audio_format: {
-                    type: 'raw',
-                    sample_rate: 16000,
-                    encoding: 'pcm_f32le'
-                  },
-                  auth_token: apiKey
-                }));
-              };
-
-              ws.current.onmessage = (event) => {
-                try {
-                  const data = JSON.parse(event.data);
-                   if (data.message === 'AddTranscript') {
-                    const timestamp = new Date().toLocaleTimeString();
-                    const transcript = data.results.reduce((acc, result) => acc + result.alternatives[0].transcript, '');
-                    setTranscription(prev => prev + `[${timestamp}] ${transcript} `);
                   }
-                } catch (error) {
-                  console.error('Error parsing WebSocket message:', error);
-                }
-              };
+                };
+                mediaRecorder.current.onstop = () => {
+                  const audioBlob = new Blob(audioChunks.current, { type: 'audio/webm' });
+                  audioChunks.current = [];
+                  const url = URL.createObjectURL(audioBlob);
+                  audioUrl.current = url;
+                  if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+                    ws.current.send(JSON.stringify({ message: 'EndOfStream' }));
+                    ws.current.close();
+                  }
+                };
+                mediaRecorder.current.start(200);
 
-              ws.current.onerror = (error) => {
-                console.error('WebSocket error:', error);
-              };
+                ws.current = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe');
 
-              ws.current.onclose = () => {
-                console.log('WebSocket connection closed');
-              };
-            })
-            .catch(error => {
-              console.error('Error accessing microphone:', error);
-            });
+                ws.current.onopen = () => {
+                  console.log('WebSocket connection opened');
+                  ws.current.send(JSON.stringify({
+                    message: 'StartRecognition',
+                    transcription_config: {
+                      language: 'en',
+                      diarization: 'none',
+                      operating_point: 'enhanced',
+                      max_delay_mode: 'flexible',
+                      max_delay: 1,
+                      enable_partials: true,
+                      enable_entities: true
+                    },
+                    audio_format: {
+                      type: 'raw',
+                      sample_rate: 16000,
+                      encoding: 'pcm_f32le'
+                    },
+                    auth_token: jwt
+                  }));
+                };
+
+                ws.current.onmessage = (event) => {
+                  try {
+                    const data = JSON.parse(event.data);
+                    if (data.message === 'AddPartialTranscript') {
+                      const partialText = data.results
+                        .map((r) => r.alternatives?.[0].content)
+                        .join(' ');
+                        const timestamp = new Date().toLocaleTimeString();
+                      setTranscription(prev => prev + `[${timestamp}] ${partialText} `);
+                    } else if (data.message === 'AddTranscript') {
+                      const text = data.results.map((r) => r.alternatives?.[0].content).join(' ');
+                      finalText.current += text;
+                      const timestamp = new Date().toLocaleTimeString();
+                      setTranscription(prev => prev + `[${timestamp}] ${text} `);
+                    }
+                  } catch (error) {
+                    console.error('Error parsing WebSocket message:', error);
+                  }
+                };
+
+                ws.current.onerror = (error) => {
+                  console.error('WebSocket error:', error);
+                };
+
+                ws.current.onclose = () => {
+                  console.log('WebSocket connection closed');
+                };
+              })
+              .catch(error => {
+                console.error('Error accessing microphone:', error);
+              });
+          });
         } else if (mediaRecorder.current && mediaRecorder.current.state === 'recording') {
             mediaRecorder.current.stop();
             if (streamRef.current) {
