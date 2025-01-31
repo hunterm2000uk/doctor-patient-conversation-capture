@@ -98,7 +98,6 @@ import React, { useState, useEffect, useRef } from 'react';
                     sample_rate: 48000,
                     operating_point: 'enhanced',
                   }
-									setStatusMessage(prev => prev + '\nOpen...');
                 };
                 setStatusMessage(prev => prev + `\nSending StartRecognition message: ${JSON.stringify(startRecognitionMessage)}`);
                 setTimeout(() => {
