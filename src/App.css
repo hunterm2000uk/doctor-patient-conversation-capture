@@ -1,0 +1,37 @@
+.app-container {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+    }
+
+    .panels {
+      display: flex;
+      width: 100%;
+      height: 100%;
+    }
+
+    .transcription-panel, .letter-panel {
+      flex: 1;
+      padding: 20px;
+      border: 1px solid #ddd;
+      overflow-y: auto;
+    }
+
+    .transcription-panel {
+      border-right: none;
+    }
+
+    .letter-panel {
+      border-left: none;
+    }
+
+    .letter-section {
+      margin-bottom: 20px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 100px;
+      margin-bottom: 10px;
+    }
