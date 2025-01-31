@@ -55,7 +55,7 @@ import React, { useState, useEffect, useRef } from 'react';
                     setStatusMessage(prev => prev + `\nSending audio data to Speechmatics API... Chunk size: ${event.data.size}`);
                     ws.current.send(event.data);
                   } else {
-                     setStatusMessage(prev => prev + `\nWebSocket not open, audio chunk not sent. ReadyState: ${ws.current?.readyState}`);
+                    setStatusMessage(prev => prev + `\nWebSocket not open, audio chunk not sent. ReadyState: ${ws.current?.readyState}`);
                   }
                 }
               };
@@ -74,7 +74,6 @@ import React, { useState, useEffect, useRef } from 'react';
                   setStatusMessage(prev => prev + '\nWebSocket not open, EndOfStream message not sent.');
                 }
               };
-              mediaRecorder.current.start(200); // Send data every 200ms
 
               // Initialize WebSocket
               setStatusMessage(prev => prev + '\nConnecting to Speechmatics API...');
@@ -95,6 +94,7 @@ import React, { useState, useEffect, useRef } from 'react';
                     setStatusMessage(prev => prev + '\nNo transcription received from Speechmatics API after 10 seconds.');
                   }
                 }, 10000);
+                mediaRecorder.current.start(200); // Start recording after WebSocket is open
               };
 
               ws.current.onmessage = (event) => {
