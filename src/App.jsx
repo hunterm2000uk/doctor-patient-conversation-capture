@@ -61,11 +61,6 @@ import React, { useState, useEffect, useRef } from 'react';
                 audioChunks.current = [];
                 const url = URL.createObjectURL(audioBlob);
                 audioUrl.current = url;
-                if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-                  setStatusMessage('Sending EndOfStream message to Speechmatics API...');
-                  ws.current.send(JSON.stringify({ message: 'EndOfStream' }));
-                  ws.current.close();
-                }
               };
               mediaRecorder.current.start(200); // Send data every 200ms
 
@@ -106,8 +101,11 @@ import React, { useState, useEffect, useRef } from 'react';
               };
 
               ws.current.onclose = () => {
-                setStatusMessage('WebSocket connection closed.');
-                console.log('WebSocket connection closed');
+                setStatusMessage('WebSocket connection closed. Sending EndOfStream message...');
+                if (ws.current && ws.current.readyState !== WebSocket.CLOSED) {
+                  ws.current.send(JSON.stringify({ message: 'EndOfStream' }));
+                  ws.current.close();
+                }
               };
             })
             .catch(error => {
