@@ -11,6 +11,8 @@ import React, { useState, useEffect, useRef } from 'react';
       });
       const mediaRecorder = useRef(null);
       const audioChunks = useRef([]);
+      const streamRef = useRef(null);
+      const audioUrl = useRef(null);
 
       const handleEditLetter = (field, value) => {
         setClinicLetter(prev => ({ ...prev, [field]: value }));
@@ -37,6 +39,7 @@ import React, { useState, useEffect, useRef } from 'react';
         if (isRecording) {
           navigator.mediaDevices.getUserMedia({ audio: true })
             .then(stream => {
+              streamRef.current = stream;
               mediaRecorder.current = new MediaRecorder(stream);
               mediaRecorder.current.ondataavailable = (event) => {
                 if (event.data.size > 0) {
@@ -46,6 +49,8 @@ import React, { useState, useEffect, useRef } from 'react';
               mediaRecorder.current.onstop = () => {
                 const audioBlob = new Blob(audioChunks.current, { type: 'audio/webm' });
                 audioChunks.current = [];
+                const url = URL.createObjectURL(audioBlob);
+                audioUrl.current = url;
                 // Placeholder for STT
                 const timestamp = new Date().toLocaleTimeString();
                 setTranscription(prev => prev + `[${timestamp}] ... (audio processed) ... `);
@@ -55,8 +60,11 @@ import React, { useState, useEffect, useRef } from 'react';
             .catch(error => {
               console.error('Error accessing microphone:', error);
             });
-        } else if (mediaRecorder.current) {
-          mediaRecorder.current.stop();
+        } else if (mediaRecorder.current && mediaRecorder.current.state === 'recording') {
+            mediaRecorder.current.stop();
+            if (streamRef.current) {
+              streamRef.current.getTracks().forEach(track => track.stop());
+            }
         }
       }, [isRecording]);
 
@@ -77,6 +85,7 @@ import React, { useState, useEffect, useRef } from 'react';
               <h2>Live Transcription</h2>
               <button onClick={toggleRecording}>{isRecording ? 'Stop Recording' : 'Start Recording'}</button>
               <p>{transcription}</p>
+              {audioUrl.current && <audio src={audioUrl.current} controls />}
             </div>
             <div className="letter-panel">
               <h2>Clinic Letter</h2>
