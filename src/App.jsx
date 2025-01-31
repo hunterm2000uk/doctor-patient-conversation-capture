@@ -15,7 +15,7 @@ import React, { useState, useEffect, useRef } from 'react';
       const streamRef = useRef(null);
       const audioUrl = useRef(null);
       const ws = useRef(null);
-      const apiKey = 'fQxsqtjOjLsXOrzCgyRAJGjXcYvLpjW1'; // Updated API key
+      const apiKey = 'jiM6y2edA7pPjtZ2l6E98anSoy8jH0zH'; // Updated API key
       const timeoutRef = useRef(null);
       const statusBoxRef = useRef(null);
       const wsTimeoutRef = useRef(null);
@@ -48,7 +48,10 @@ import React, { useState, useEffect, useRef } from 'react';
             .then(stream => {
               setStatusMessage(prev => prev + '\nMicrophone access granted. Initializing audio recorder...');
               streamRef.current = stream;
-              mediaRecorder.current = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+              mediaRecorder.current = new MediaRecorder(stream, {
+                 mimeType: 'audio/webm;codecs=pcm',
+                 bitsPerSecond: 48000
+              });
               mediaRecorder.current.ondataavailable = (event) => {
                 if (event.data.size > 0) {
                   audioChunks.current.push(event.data);
@@ -86,6 +89,8 @@ import React, { useState, useEffect, useRef } from 'react';
                   message: 'StartRecognition',
                   transcription_config: {
                     language: 'en',
+                     audio_format: 'pcm',
+                     sample_rate: 48000,
                     operating_point: 'enhanced',
                   },
                   auth_token: apiKey
@@ -102,6 +107,13 @@ import React, { useState, useEffect, useRef } from 'react';
                 try {
                   const data = JSON.parse(event.data);
                   setStatusMessage(prev => prev + `\nWebSocket message received: ${JSON.stringify(data)}`);
+                  if (data.message === 'StartRecognition') {
+                    if (data.error) {
+                      setStatusMessage(prev => prev + `\nStartRecognition error: ${data.error}`);
+                    } else {
+                      setStatusMessage(prev => prev + '\nStartRecognition successful.');
+                    }
+                  }
                   if (data.message === 'AddTranscript') {
                     const timestamp = new Date().toLocaleTimeString();
                     const transcript = data.results.reduce((acc, result) => acc + result.alternatives[0].transcript, '');
@@ -121,8 +133,8 @@ import React, { useState, useEffect, useRef } from 'react';
                 clearTimeout(wsTimeoutRef.current);
               };
 
-              ws.current.onclose = () => {
-                setStatusMessage(prev => prev + '\nWebSocket connection closed.');
+              ws.current.onclose = (event) => {
+                setStatusMessage(prev => prev + `\nWebSocket connection closed. Close code: ${event.code}, Reason: ${event.reason}`);
                 clearTimeout(wsTimeoutRef.current);
               };
 
