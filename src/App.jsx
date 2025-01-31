@@ -78,10 +78,10 @@ import React, { useState, useEffect, useRef } from 'react';
 
               // Initialize WebSocket
               setStatusMessage(prev => prev + '\nConnecting to Speechmatics API...');
-              ws.current = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe?format=pcm&sample_rate=48000');
+              ws.current = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe', 'pcm');
 
               ws.current.onopen = () => {
-                setStatusMessage(prev => prev + '\nWebSocket connection opened. Sending StartRecognition message...');
+                setStatusMessage(prev => prev + `\nWebSocket connection opened. ReadyState: ${ws.current.readyState}. Sending StartRecognition message...`);
                 ws.current.send(JSON.stringify({
                   message: 'StartRecognition',
                   transcription_config: {
