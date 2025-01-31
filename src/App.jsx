@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
     import './App.css';
+    import { WebSocket } from 'ws';
 
     function App() {
       const [transcription, setTranscription] = useState('');
@@ -13,7 +14,8 @@ import React, { useState, useEffect, useRef } from 'react';
       const audioChunks = useRef([]);
       const streamRef = useRef(null);
       const audioUrl = useRef(null);
-      const recognition = useRef(null);
+      const ws = useRef(null);
+      const apiKey = 'fQxsqtjOjLsXOrzCgyRAJGjXcYvLpjW1'; // Updated API key
 
       const handleEditLetter = (field, value) => {
         setClinicLetter(prev => ({ ...prev, [field]: value }));
@@ -41,10 +43,13 @@ import React, { useState, useEffect, useRef } from 'react';
           navigator.mediaDevices.getUserMedia({ audio: true })
             .then(stream => {
               streamRef.current = stream;
-              mediaRecorder.current = new MediaRecorder(stream);
+              mediaRecorder.current = new MediaRecorder(stream, { mimeType: 'audio/webm' });
               mediaRecorder.current.ondataavailable = (event) => {
                 if (event.data.size > 0) {
                   audioChunks.current.push(event.data);
+                  if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+                    ws.current.send(event.data);
+                  }
                 }
               };
               mediaRecorder.current.onstop = () => {
@@ -52,30 +57,49 @@ import React, { useState, useEffect, useRef } from 'react';
                 audioChunks.current = [];
                 const url = URL.createObjectURL(audioBlob);
                 audioUrl.current = url;
+                if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+                  ws.current.send(JSON.stringify({ message: 'EndOfStream' }));
+                  ws.current.close();
+                }
               };
-              mediaRecorder.current.start();
+              mediaRecorder.current.start(200); // Send data every 200ms
 
-              // Initialize SpeechRecognition
-              const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-              if (SpeechRecognition) {
-                recognition.current = new SpeechRecognition();
-                recognition.current.lang = 'en-US';
-                recognition.current.interimResults = true;
+              // Initialize WebSocket
+              ws.current = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe?format=pcm&sample_rate=48000',
+              );
 
-                recognition.current.onresult = (event) => {
-                  let finalTranscript = '';
-                  for (let i = event.resultIndex; i < event.results.length; i++) {
-                    if (event.results[i].isFinal) {
-                      finalTranscript += event.results[i][0].transcript;
-                    }
-                  }
-                  if (finalTranscript) {
+              ws.current.onopen = () => {
+                console.log('WebSocket connection opened');
+                ws.current.send(JSON.stringify({
+                  message: 'StartRecognition',
+                  transcription_config: {
+                    language: 'en',
+                    operating_point: 'enhanced',
+                  },
+                  auth_token: apiKey
+                }));
+              };
+
+              ws.current.onmessage = (event) => {
+                try {
+                  const data = JSON.parse(event.data);
+                  if (data.message === 'AddTranscript') {
                     const timestamp = new Date().toLocaleTimeString();
-                    setTranscription(prev => prev + `[${timestamp}] ${finalTranscript} `);
+                    const transcript = data.results.reduce((acc, result) => acc + result.alternatives[0].transcript, '');
+                    setTranscription(prev => prev + `[${timestamp}] ${transcript} `);
                   }
-                };
-                recognition.current.start();
-              }
+                } catch (error) {
+                  console.error('Error parsing WebSocket message:', error);
+                }
+              };
+
+              ws.current.onerror = (error) => {
+                console.error('WebSocket error:', error);
+              };
+
+              ws.current.onclose = () => {
+                console.log('WebSocket connection closed');
+              };
             })
             .catch(error => {
               console.error('Error accessing microphone:', error);
@@ -84,9 +108,6 @@ import React, { useState, useEffect, useRef } from 'react';
             mediaRecorder.current.stop();
             if (streamRef.current) {
               streamRef.current.getTracks().forEach(track => track.stop());
-            }
-            if (recognition.current) {
-              recognition.current.stop();
             }
         }
       }, [isRecording]);
