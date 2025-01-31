@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
     import './App.css';
-    import { WebSocket } from 'ws';
 
     function App() {
       const [transcription, setTranscription] = useState('');
@@ -72,8 +71,7 @@ import React, { useState, useEffect, useRef } from 'react';
 
               // Initialize WebSocket
               setStatusMessage('Connecting to Speechmatics API...');
-              ws.current = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe?format=pcm&sample_rate=48000',
-              );
+              ws.current = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe?format=pcm&sample_rate=48000');
 
               ws.current.onopen = () => {
                 setStatusMessage('WebSocket connection opened. Starting transcription...');
