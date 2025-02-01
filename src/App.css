@@ -35,3 +35,11 @@
       height: 100px;
       margin-bottom: 10px;
     }
+
+    .status-box {
+      height: 100px;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      padding: 5px;
+      margin-top: 10px;
+    }

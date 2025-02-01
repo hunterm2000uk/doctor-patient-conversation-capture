@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
     import './App.css';
-    import { WebSocket } from 'ws';
 
     function App() {
       const [transcription, setTranscription] = useState('');
       const [isRecording, setIsRecording] = useState(false);
-      const [uploadStatus, setUploadStatus] = useState('');
+      const [uploadStatus, setUploadStatus] = useState([]);
       const [clinicLetter, setClinicLetter] = useState({
         chiefComplaint: 'Patient presents with...',
         historyOfPresentIllness: 'The patient reports...',
@@ -15,8 +14,8 @@ import React, { useState, useEffect, useRef } from 'react';
       const audioChunks = useRef([]);
       const streamRef = useRef(null);
       const audioUrl = useRef(null);
-      const ws = useRef(null);
       const apiKey = 'fQxsqtjOjLsXOrzCgyRAJGjXcYvLpjW1'; // Updated API key
+      const jobId = useRef(null);
 
       const handleEditLetter = (field, value) => {
         setClinicLetter(prev => ({ ...prev, [field]: value }));
@@ -48,9 +47,6 @@ import React, { useState, useEffect, useRef } from 'react';
               mediaRecorder.current.ondataavailable = (event) => {
                 if (event.data.size > 0) {
                   audioChunks.current.push(event.data);
-                  if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-                    ws.current.send(event.data);
-                  }
                 }
               };
               mediaRecorder.current.onstop = () => {
@@ -58,49 +54,8 @@ import React, { useState, useEffect, useRef } from 'react';
                 audioChunks.current = [];
                 const url = URL.createObjectURL(audioBlob);
                 audioUrl.current = url;
-                if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-                  ws.current.send(JSON.stringify({ message: 'EndOfStream' }));
-                  ws.current.close();
-                }
               };
-              mediaRecorder.current.start(200); // Send data every 200ms
-
-              // Initialize WebSocket
-              ws.current = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe?format=pcm&sample_rate=48000',
-              );
-
-              ws.current.onopen = () => {
-                console.log('WebSocket connection opened');
-                ws.current.send(JSON.stringify({
-                  message: 'StartRecognition',
-                  transcription_config: {
-                    language: 'en',
-                    operating_point: 'enhanced',
-                  },
-                  auth_token: apiKey
-                }));
-              };
-
-              ws.current.onmessage = (event) => {
-                try {
-                  const data = JSON.parse(event.data);
-                  if (data.message === 'AddTranscript') {
-                    const timestamp = new Date().toLocaleTimeString();
-                    const transcript = data.results.reduce((acc, result) => acc + result.alternatives[0].transcript, '');
-                    setTranscription(prev => prev + `[${timestamp}] ${transcript} `);
-                  }
-                } catch (error) {
-                  console.error('Error parsing WebSocket message:', error);
-                }
-              };
-
-              ws.current.onerror = (error) => {
-                console.error('WebSocket error:', error);
-              };
-
-              ws.current.onclose = () => {
-                console.log('WebSocket connection closed');
-              };
+              mediaRecorder.current.start(200);
             })
             .catch(error => {
               console.error('Error accessing microphone:', error);
@@ -121,59 +76,89 @@ import React, { useState, useEffect, useRef } from 'react';
         const file = event.target.files[0];
         if (!file) return;
 
-        setUploadStatus('Uploading...');
+        setUploadStatus(prev => [...prev, 'Uploading: File selected.']);
 
         const reader = new FileReader();
         reader.onload = async (e) => {
-          const audioData = e.target.result;
-          setUploadStatus('File uploaded successfully. Sending to API...');
-
+          setUploadStatus(prev => [...prev, 'Uploading: File read.']);
           try {
-            const wsUpload = new WebSocket('wss://api.speechmatics.com/v2/ws/transcribe?format=pcm&sample_rate=48000');
+            setUploadStatus(prev => [...prev, 'Uploading: Sending file to API...']);
+            const uploadResponse = await fetch('https://api.speechmatics.com/v2/jobs', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${apiKey}`,
+              },
+              body: file
+            });
 
-            wsUpload.onopen = () => {
-              console.log('WebSocket connection opened for upload');
-              wsUpload.send(JSON.stringify({
-                message: 'StartRecognition',
-                transcription_config: {
-                  language: 'en',
-                  operating_point: 'enhanced',
-                },
-                auth_token: apiKey
-              }));
-              wsUpload.send(audioData);
-              wsUpload.send(JSON.stringify({ message: 'EndOfStream' }));
-            };
+            if (!uploadResponse.ok) {
+              const errorText = await uploadResponse.text();
+              setUploadStatus(prev => [...prev, `Uploading: File upload failed: ${uploadResponse.status} - ${errorText}`]);
+              return;
+            }
 
-            wsUpload.onmessage = (event) => {
+            const uploadData = await uploadResponse.json();
+            jobId.current = uploadData.id;
+            setUploadStatus(prev => [...prev, `Uploading: File uploaded successfully. Job ID: ${jobId.current}`]);
+
+            const pollForResults = async () => {
+              setUploadStatus(prev => [...prev, 'Uploading: Polling for results...']);
               try {
-                const data = JSON.parse(event.data);
-                if (data.message === 'AddTranscript') {
+                const jobStatusResponse = await fetch(`https://api.speechmatics.com/v2/jobs/${jobId.current}`, {
+                  headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                  }
+                });
+
+                if (!jobStatusResponse.ok) {
+                  const errorText = await jobStatusResponse.text();
+                  setUploadStatus(prev => [...prev, `Uploading: Error polling job status: ${jobStatusResponse.status} - ${errorText}`]);
+                  return;
+                }
+
+                const jobStatusData = await jobStatusResponse.json();
+                setUploadStatus(prev => [...prev, `Uploading: Job status: ${jobStatusData.status}`]);
+
+                if (jobStatusData.status === 'done') {
+                  setUploadStatus(prev => [...prev, 'Uploading: Job completed. Fetching transcript...']);
+                  const transcriptResponse = await fetch(`https://api.speechmatics.com/v2/jobs/${jobId.current}/transcript`, {
+                    headers: {
+                      'Authorization': `Bearer ${apiKey}`,
+                    }
+                  });
+
+                  if (!transcriptResponse.ok) {
+                    const errorText = await transcriptResponse.text();
+                    setUploadStatus(prev => [...prev, `Uploading: Error fetching transcript: ${transcriptResponse.status} - ${errorText}`]);
+                    return;
+                  }
+
+                  const transcriptData = await transcriptResponse.json();
+                  const transcript = transcriptData.results.reduce((acc, result) => acc + result.alternatives[0].transcript, '');
                   const timestamp = new Date().toLocaleTimeString();
-                  const transcript = data.results.reduce((acc, result) => acc + result.alternatives[0].transcript, '');
                   setTranscription(prev => prev + `[${timestamp}] ${transcript} `);
+                  setUploadStatus(prev => [...prev, 'Uploading: Transcription complete.']);
+                  return;
+                } else if (jobStatusData.status === 'failed') {
+                  setUploadStatus(prev => [...prev, 'Uploading: Job failed.']);
+                  return;
+                } else {
+                  setTimeout(pollForResults, 5000); // Poll every 5 seconds
                 }
               } catch (error) {
-                console.error('Error parsing WebSocket message:', error);
+                setUploadStatus(prev => [...prev, `Uploading: Error during polling: ${error.message}`]);
               }
             };
 
-            wsUpload.onerror = (error) => {
-              console.error('WebSocket error:', error);
-              setUploadStatus('Upload failed.');
-            };
+            pollForResults();
 
-            wsUpload.onclose = () => {
-              console.log('WebSocket connection closed for upload');
-              setUploadStatus('Transcription complete.');
-            };
           } catch (error) {
-            console.error('Error sending file to API:', error);
-            setUploadStatus('Upload failed.');
+            console.error('Error processing audio file:', error);
+            setUploadStatus(prev => [...prev, `Uploading: Error processing audio file: ${error.message}`]);
           }
         };
         reader.onerror = () => {
-          setUploadStatus('Error reading file.');
+          setUploadStatus(prev => [...prev, 'Uploading: Error reading file.']);
         };
         reader.readAsArrayBuffer(file);
       };
@@ -193,7 +178,11 @@ import React, { useState, useEffect, useRef } from 'react';
               <p>{transcription}</p>
               {audioUrl.current && <audio src={audioUrl.current} controls />}
               <input type="file" accept=".wav,.mp3" onChange={handleFileUpload} />
-              {uploadStatus && <p>{uploadStatus}</p>}
+              <div className="status-box">
+                {uploadStatus.map((status, index) => (
+                  <p key={index}>{status}</p>
+                ))}
+              </div>
             </div>
             <div className="letter-panel">
               <h2>Clinic Letter</h2>
